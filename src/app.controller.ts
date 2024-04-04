@@ -11,17 +11,9 @@ export class AppController {
   }
 
   @Post("api/calculate-route")
-  async calculateRoute(@Body() data) {
-    const source = data.source;
-    const destination = data.destination;
-    return this.appService.calculateRoute(source, destination);
-  }
-
-  @Post("api/calculate-path")
-  async calculatePath(@Body() data) {
-    const source = data.source;
-    const destination = data.destination;
-    const mode = data.mode;
-    return this.appService.calculatePath(source, destination, mode);
+  async calculateRoute(
+    @Body() data: { startLocation: { lat: number; lng: number } }
+  ) {
+    return this.appService.calculateRoute(data);
   }
 }

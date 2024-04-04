@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { LOCATIONS } from "./constants";
 import axios from "axios";
 
 @Injectable()
@@ -11,20 +12,63 @@ export class AppService {
     };
   }
 
-  async calculateRoute(
+  async calculateRoute(data: { startLocation: { lat: number; lng: number } }) {
+    try {
+      let startLocation = data.startLocation;
+      let unvisitedLocations = [...LOCATIONS];
+      let route = [];
+
+      while (unvisitedLocations.length > 0) {
+        let nearestLocation = null;
+        let shortestDistance = Infinity;
+        let shortestDistanceText = null;
+
+        for (const location of unvisitedLocations) {
+          const distanceData = await this.calculateDistance(
+            startLocation,
+            location.coordinates
+          );
+
+          const distanceInMeters = distanceData.distanceInMeters;
+          const distanceText = distanceData.distance;
+
+          if (distanceInMeters < shortestDistance) {
+            shortestDistance = distanceInMeters;
+            nearestLocation = location;
+            shortestDistanceText = distanceText;
+          }
+        }
+
+        if (nearestLocation) {
+          nearestLocation.shortestDistanceText = shortestDistanceText;
+          route.push(nearestLocation);
+          unvisitedLocations = unvisitedLocations.filter(
+            (loc) => loc !== nearestLocation
+          );
+          startLocation = nearestLocation.coordinates;
+        } else {
+          throw new Error("Failed to find the nearest location.");
+        }
+      }
+
+      return route;
+    } catch (error) {
+      console.error("Error calculating route:", error);
+      throw error;
+    }
+  }
+
+  async calculateDistance(
     source: { lat: number; lng: number },
     destination: { lat: number; lng: number }
   ) {
     try {
-      const apiKey = "AIzaSyC2znSVKp2NenYkrawAuAUv8V379X_V9WI";
+      const apiKey = "AIzaSyAg1jbL4bRBmiqWx5ZQImooTyRSMQTOtcs";
       const apiUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${source.lat},${source.lng}&destinations=${destination.lat},${destination.lng}&key=${apiKey}`;
 
       const response = await axios.get(apiUrl);
 
       if (response.data.status === "OK") {
-        const sourceAddresses = response.data.origin_addresses[0];
-        const destinationAddresses = response.data.destination_addresses[0];
-
         const distance = response.data.rows[0]?.elements[0]?.distance?.text;
         const duration = response.data.rows[0]?.elements[0]?.duration?.text;
 
@@ -32,8 +76,6 @@ export class AppService {
           response.data.rows[0]?.elements[0]?.distance?.value;
 
         return {
-          sourceAddresses,
-          destinationAddresses,
           distance,
           distanceInMeters,
           duration,
@@ -45,35 +87,6 @@ export class AppService {
       }
     } catch (error) {
       console.error("Error calculating route:", error);
-      throw error;
-    }
-  }
-
-  async calculatePath(
-    source: { lat: number; lng: number },
-    destination: { lat: number; lng: number },
-    mode: String
-  ) {
-    try {
-      const apiKey = "AIzaSyC2znSVKp2NenYkrawAuAUv8V379X_V9WI";
-      const apiUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${source.lat},${source.lng}&destination=${destination.lat},${destination.lng}&mode=${mode}&key=${apiKey}`;
-
-      const response = await axios.get(apiUrl);
-      if (response.data.status === "OK") {
-        const route = response.data.routes[0];
-        const distance =
-          route?.legs.reduce((acc, leg) => acc + leg.distance.value, 0) ?? 0;
-        const duration =
-          route?.legs.reduce((acc, leg) => acc + leg.duration.value, 0) ?? 0;
-
-        return { route, distance, duration };
-      } else {
-        throw new Error(
-          "Failed to calculate shortest path. Please check API key and coordinates."
-        );
-      }
-    } catch (error) {
-      console.error("Error calculating path:", error);
       throw error;
     }
   }
