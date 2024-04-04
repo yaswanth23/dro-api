@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
 import { LOCATIONS } from "./constants";
 import axios from "axios";
 
@@ -14,6 +14,19 @@ export class AppService {
 
   async calculateRoute(data: { startLocation: { lat: number; lng: number } }) {
     try {
+      let findlocation = LOCATIONS.find(
+        (location) =>
+          location.coordinates.lat === data.startLocation.lat &&
+          location.coordinates.lng === data.startLocation.lng
+      );
+
+      if (!findlocation) {
+        throw new HttpException(
+          "Start location not found in the provided locations.",
+          HttpStatus.NOT_FOUND
+        );
+      }
+
       let startLocation = data.startLocation;
       let unvisitedLocations = [...LOCATIONS];
       let route = [];
@@ -81,13 +94,64 @@ export class AppService {
           duration,
         };
       } else {
-        throw new Error(
-          "Failed to calculate route. Please check coordinates and API key."
+        throw new HttpException(
+          "Failed to calculate route. Please check coordinates and API key.",
+          HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
     } catch (error) {
       console.error("Error calculating route:", error);
       throw error;
     }
+  }
+
+  //using 2-opt
+  async twoOpt(startLocation: { lat: number; lng: number }) {
+    const foundStartLocation = LOCATIONS.find(
+      (location) =>
+        location.coordinates.lat === startLocation.lat &&
+        location.coordinates.lng === startLocation.lng
+    );
+
+    if (!foundStartLocation) {
+      throw new HttpException(
+        "Start location not found in the provided locations.",
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    let route = LOCATIONS.filter((location) => location !== foundStartLocation);
+
+    route = [foundStartLocation, ...route];
+
+    let improved = true;
+    let bestRoute = [...route];
+
+    while (improved) {
+      improved = false;
+      for (let i = 0; i < route.length - 1; i++) {
+        for (let j = i + 2; j < route.length; j++) {
+          const newRoute = [...route];
+
+          [newRoute[i + 1], newRoute[j]] = [newRoute[j], newRoute[i + 1]];
+
+          let newDistance = 0;
+          for (let k = 0; k < newRoute.length - 1; k++) {
+            const distance = await this.calculateDistance(
+              newRoute[k].coordinates,
+              newRoute[k + 1].coordinates
+            );
+            newDistance += distance.distanceInMeters;
+          }
+
+          if (newDistance < bestRoute.length) {
+            bestRoute = newRoute;
+            improved = true;
+          }
+        }
+      }
+      route = bestRoute;
+    }
+    return bestRoute;
   }
 }
