@@ -1,6 +1,11 @@
 import { Controller, Get, Post, Body } from "@nestjs/common";
 import { AppService } from "./app.service";
 
+interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
@@ -11,9 +16,7 @@ export class AppController {
   }
 
   @Post("api/calculate-route")
-  async calculateRoute(
-    @Body() data: { startLocation: { lat: number; lng: number } }
-  ) {
+  async calculateRoute(@Body() data: { coordinates: Coordinates[] }) {
     return this.appService.calculateRoute(data);
   }
 

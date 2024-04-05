@@ -2,6 +2,11 @@ import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
 import { LOCATIONS } from "./constants";
 import axios from "axios";
 
+interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
 @Injectable()
 export class AppService {
   getPing(): any {
@@ -12,24 +17,12 @@ export class AppService {
     };
   }
 
-  async calculateRoute(data: { startLocation: { lat: number; lng: number } }) {
+  async calculateRoute(data: { coordinates: Coordinates[] }) {
     try {
-      let findlocation = LOCATIONS.find(
-        (location) =>
-          location.coordinates.lat === data.startLocation.lat &&
-          location.coordinates.lng === data.startLocation.lng
-      );
-
-      if (!findlocation) {
-        throw new HttpException(
-          "Start location not found in the provided locations.",
-          HttpStatus.NOT_FOUND
-        );
-      }
-
-      let startLocation = data.startLocation;
-      let unvisitedLocations = [...LOCATIONS];
+      let startLocation = data.coordinates[0];
+      let unvisitedLocations = [...data.coordinates];
       let route = [];
+      let addressesMap = new Map();
 
       while (unvisitedLocations.length > 0) {
         let nearestLocation = null;
@@ -39,7 +32,8 @@ export class AppService {
         for (const location of unvisitedLocations) {
           const distanceData = await this.calculateDistance(
             startLocation,
-            location.coordinates
+            location,
+            addressesMap
           );
 
           const distanceInMeters = distanceData.distanceInMeters;
@@ -53,12 +47,19 @@ export class AppService {
         }
 
         if (nearestLocation) {
+          nearestLocation.originAddress = addressesMap.get(
+            `${nearestLocation.lat},${nearestLocation.lng}`
+          );
           nearestLocation.shortestDistanceText = shortestDistanceText;
           route.push(nearestLocation);
           unvisitedLocations = unvisitedLocations.filter(
-            (loc) => loc !== nearestLocation
+            (loc) =>
+              loc.lat !== nearestLocation.lat || loc.lng !== nearestLocation.lng
           );
-          startLocation = nearestLocation.coordinates;
+          startLocation = {
+            lat: nearestLocation.lat,
+            lng: nearestLocation.lng,
+          };
         } else {
           throw new Error("Failed to find the nearest location.");
         }
@@ -73,7 +74,8 @@ export class AppService {
 
   async calculateDistance(
     source: { lat: number; lng: number },
-    destination: { lat: number; lng: number }
+    destination: { lat: number; lng: number },
+    addressesMap: any
   ) {
     try {
       const apiKey = "AIzaSyAg1jbL4bRBmiqWx5ZQImooTyRSMQTOtcs";
@@ -84,6 +86,17 @@ export class AppService {
       if (response.data.status === "OK") {
         const distance = response.data.rows[0]?.elements[0]?.distance?.text;
         const duration = response.data.rows[0]?.elements[0]?.duration?.text;
+        const originAddresses = response.data.origin_addresses[0];
+        const destinationAddresses = response.data.destination_addresses[0];
+
+        const sourceKey = `${source.lat},${source.lng}`;
+        const destKey = `${destination.lat},${destination.lng}`;
+        if (!addressesMap.has(sourceKey)) {
+          addressesMap.set(sourceKey, originAddresses);
+        }
+        if (!addressesMap.has(destKey)) {
+          addressesMap.set(destKey, destinationAddresses);
+        }
 
         const distanceInMeters =
           response.data.rows[0]?.elements[0]?.distance?.value;
@@ -92,6 +105,8 @@ export class AppService {
           distance,
           distanceInMeters,
           duration,
+          originAddresses,
+          destinationAddresses,
         };
       } else {
         throw new HttpException(
@@ -126,6 +141,7 @@ export class AppService {
 
     let improved = true;
     let bestRoute = [...route];
+    let addressesMap = new Map();
 
     while (improved) {
       improved = false;
@@ -139,7 +155,8 @@ export class AppService {
           for (let k = 0; k < newRoute.length - 1; k++) {
             const distance = await this.calculateDistance(
               newRoute[k].coordinates,
-              newRoute[k + 1].coordinates
+              newRoute[k + 1].coordinates,
+              addressesMap
             );
             newDistance += distance.distanceInMeters;
           }
