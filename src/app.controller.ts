@@ -19,11 +19,4 @@ export class AppController {
   async calculateRoute(@Body() data: { coordinates: Coordinates[] }) {
     return this.appService.calculateRoute(data);
   }
-
-  @Post("api/twoOpt/calculate-route")
-  async calculateRouteOpt(
-    @Body() data: { startLocation: { lat: number; lng: number } }
-  ) {
-    return this.appService.twoOpt(data.startLocation);
-  }
 }

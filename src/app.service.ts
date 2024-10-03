@@ -1,5 +1,4 @@
 import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
-import { LOCATIONS } from "./constants";
 import axios from "axios";
 
 interface Coordinates {
@@ -118,57 +117,5 @@ export class AppService {
       console.error("Error calculating route:", error);
       throw error;
     }
-  }
-
-  //using 2-opt
-  async twoOpt(startLocation: { lat: number; lng: number }) {
-    const foundStartLocation = LOCATIONS.find(
-      (location) =>
-        location.coordinates.lat === startLocation.lat &&
-        location.coordinates.lng === startLocation.lng
-    );
-
-    if (!foundStartLocation) {
-      throw new HttpException(
-        "Start location not found in the provided locations.",
-        HttpStatus.NOT_FOUND
-      );
-    }
-
-    let route = LOCATIONS.filter((location) => location !== foundStartLocation);
-
-    route = [foundStartLocation, ...route];
-
-    let improved = true;
-    let bestRoute = [...route];
-    let addressesMap = new Map();
-
-    while (improved) {
-      improved = false;
-      for (let i = 0; i < route.length - 1; i++) {
-        for (let j = i + 2; j < route.length; j++) {
-          const newRoute = [...route];
-
-          [newRoute[i + 1], newRoute[j]] = [newRoute[j], newRoute[i + 1]];
-
-          let newDistance = 0;
-          for (let k = 0; k < newRoute.length - 1; k++) {
-            const distance = await this.calculateDistance(
-              newRoute[k].coordinates,
-              newRoute[k + 1].coordinates,
-              addressesMap
-            );
-            newDistance += distance.distanceInMeters;
-          }
-
-          if (newDistance < bestRoute.length) {
-            bestRoute = newRoute;
-            improved = true;
-          }
-        }
-      }
-      route = bestRoute;
-    }
-    return bestRoute;
   }
 }
